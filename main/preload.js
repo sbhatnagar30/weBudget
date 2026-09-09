@@ -1,0 +1,50 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  db: {
+    getCards: () => ipcRenderer.invoke('db:getCards'),
+    getCard: (id) => ipcRenderer.invoke('db:getCard', id),
+    addCard: (card) => ipcRenderer.invoke('db:addCard', card),
+    updateCard: (id, updates) => ipcRenderer.invoke('db:updateCard', id, updates),
+    deleteCard: (id) => ipcRenderer.invoke('db:deleteCard', id),
+
+    getBankAccounts: () => ipcRenderer.invoke('db:getBankAccounts'),
+    getBankAccount: (id) => ipcRenderer.invoke('db:getBankAccount', id),
+    addBankAccount: (account) => ipcRenderer.invoke('db:addBankAccount', account),
+    updateBankAccount: (id, updates) => ipcRenderer.invoke('db:updateBankAccount', id, updates),
+    deleteBankAccount: (id) => ipcRenderer.invoke('db:deleteBankAccount', id),
+
+    getTransactions: (filters) => ipcRenderer.invoke('db:getTransactions', filters),
+    getTransaction: (id) => ipcRenderer.invoke('db:getTransaction', id),
+    addTransaction: (tx) => ipcRenderer.invoke('db:addTransaction', tx),
+    addTransactionsBatch: (txs) => ipcRenderer.invoke('db:addTransactionsBatch', txs),
+    updateTransaction: (id, updates) => ipcRenderer.invoke('db:updateTransaction', id, updates),
+    deleteTransaction: (id) => ipcRenderer.invoke('db:deleteTransaction', id),
+
+    getInterestSnapshots: () => ipcRenderer.invoke('db:getInterestSnapshots'),
+    addInterestSnapshot: (snapshot) => ipcRenderer.invoke('db:addInterestSnapshot', snapshot),
+
+    getStatementUploads: () => ipcRenderer.invoke('db:getStatementUploads'),
+    getStatementUpload: (id) => ipcRenderer.invoke('db:getStatementUpload', id),
+    addStatementUpload: (upload) => ipcRenderer.invoke('db:addStatementUpload', upload),
+
+    getMonthlySpendingByCategory: (filters) => ipcRenderer.invoke('db:getMonthlySpendingByCategory', filters),
+    getDailySpending: (filters) => ipcRenderer.invoke('db:getDailySpending', filters),
+    getCardMonthlySummary: (cardId, year) => ipcRenderer.invoke('db:getCardMonthlySummary', cardId, year),
+    getInterestByCard: () => ipcRenderer.invoke('db:getInterestByCard'),
+    getTotalMonthlyInterest: () => ipcRenderer.invoke('db:getTotalMonthlyInterest'),
+    getCategories: () => ipcRenderer.invoke('db:getCategories'),
+    getDbCategories: () => ipcRenderer.invoke('db:getDbCategories'),
+    getDbCategory: (id) => ipcRenderer.invoke('db:getDbCategory', id),
+    addDbCategory: (category) => ipcRenderer.invoke('db:addDbCategory', category),
+    updateDbCategory: (id, updates) => ipcRenderer.invoke('db:updateDbCategory', id, updates),
+    deleteDbCategory: (id) => ipcRenderer.invoke('db:deleteDbCategory', id),
+    getMissingStatementMonths: (cardId) => ipcRenderer.invoke('db:getMissingStatementMonths', cardId),
+  },
+
+  dialog: {
+    openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
+  },
+
+  parsePdf: (filePath) => ipcRenderer.invoke('parse:pdf', filePath),
+});

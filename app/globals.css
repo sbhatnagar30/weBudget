@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-matte-50: #f8fafc;
+  --color-matte-100: #f1f5f9;
+  --color-matte-200: #e2e8f0;
+  --color-matte-300: #cbd5e1;
+  --color-matte-400: #94a3b8;
+  --color-matte-500: #64748b;
+  --color-matte-600: #475569;
+  --color-matte-700: #334155;
+  --color-matte-800: #1e293b;
+  --color-matte-900: #0f172a;
+  --color-matte-sage: #9cb8a2;
+  --color-matte-amber: #d4a574;
+  --color-matte-rose: #c48b8b;
+  --color-matte-sky: #7ba7c9;
+  --color-matte-lavender: #9b8fb8;
+  --color-matte-slate: #6b7b8c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.heatmap-low {
+  background-color: #f1f5f9;
+}
+.heatmap-medium {
+  background-color: #d4a574;
+}
+.heatmap-high {
+  background-color: #c48b8b;
+}
+.dark .heatmap-low {
+  background-color: #1e293b;
+}
+.dark .heatmap-medium {
+  background-color: #8b6f47;
+}
+.dark .heatmap-high {
+  background-color: #8b5a5a;
+}
