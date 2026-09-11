@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
     deleteBankAccount: (id) => ipcRenderer.invoke('db:deleteBankAccount', id),
 
     getTransactions: (filters) => ipcRenderer.invoke('db:getTransactions', filters),
+    getBankTransactions: (filters) => ipcRenderer.invoke('db:getBankTransactions', filters),
+    getTransactionsForStatement: (statementFile) => ipcRenderer.invoke('db:getTransactionsForStatement', statementFile),
     getTransaction: (id) => ipcRenderer.invoke('db:getTransaction', id),
     addTransaction: (tx) => ipcRenderer.invoke('db:addTransaction', tx),
     addTransactionsBatch: (txs) => ipcRenderer.invoke('db:addTransactionsBatch', txs),
@@ -27,6 +29,7 @@ contextBridge.exposeInMainWorld('api', {
     getStatementUploads: () => ipcRenderer.invoke('db:getStatementUploads'),
     getStatementUpload: (id) => ipcRenderer.invoke('db:getStatementUpload', id),
     addStatementUpload: (upload) => ipcRenderer.invoke('db:addStatementUpload', upload),
+    deleteStatementUpload: (id) => ipcRenderer.invoke('db:deleteStatementUpload', id),
 
     getMonthlySpendingByCategory: (filters) => ipcRenderer.invoke('db:getMonthlySpendingByCategory', filters),
     getDailySpending: (filters) => ipcRenderer.invoke('db:getDailySpending', filters),
@@ -40,11 +43,16 @@ contextBridge.exposeInMainWorld('api', {
     updateDbCategory: (id, updates) => ipcRenderer.invoke('db:updateDbCategory', id, updates),
     deleteDbCategory: (id) => ipcRenderer.invoke('db:deleteDbCategory', id),
     getMissingStatementMonths: (cardId) => ipcRenderer.invoke('db:getMissingStatementMonths', cardId),
+
+    exportBackup: (filters) => ipcRenderer.invoke('db:exportBackup', filters),
+    importBackup: (backupData) => ipcRenderer.invoke('db:importBackup', backupData),
+    applyImport: (importData, resolutions) => ipcRenderer.invoke('db:applyImport', importData, resolutions),
   },
 
   dialog: {
     openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
   },
 
-  parsePdf: (filePath) => ipcRenderer.invoke('parse:pdf', filePath),
+  parsePdf: (filePath, institution) => ipcRenderer.invoke('parse:pdf', filePath, institution),
+  getSupportedInstitutions: () => ipcRenderer.invoke('parse:getSupportedInstitutions'),
 });

@@ -3,12 +3,8 @@
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, parseISO } from 'date-fns'
-import type { DailySpending, Transaction } from '../../types/electron'
-
-const AUTO_COLORS = [
-  '#64748b', '#9cb8a2', '#d4a574', '#c48b8b', '#7ba7c9',
-  '#9b8fb8', '#5f9ea0', '#cd853f', '#8fbc8f', '#bc8f8f'
-]
+import type { DailySpending, Transaction, Card, BankAccount } from '../../types/electron'
+import { AUTO_COLORS } from '../lib/constants'
 
 export default function CalendarPage() {
   const pathname = usePathname()
@@ -18,6 +14,10 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [dayTransactions, setDayTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+
+  const [cards, setCards] = useState<Card[]>([])
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [accountFilter, setAccountFilter] = useState<string>('')
 
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
@@ -29,18 +29,30 @@ export default function CalendarPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [spending, cats, txs] = await Promise.all([
+      const [spending, cats, txs, cardsData, bankAccountsData] = await Promise.all([
         window.api.db.getDailySpending({
+          ...(accountFilter ? { card_id: accountFilter.startsWith('card-') ? parseInt(accountFilter.replace('card-', '')) : undefined } : {}),
+          ...(accountFilter ? { bank_account_id: accountFilter.startsWith('bank-') ? parseInt(accountFilter.replace('bank-', '')) : undefined } : {}),
           start_date: startStr,
           end_date: endStr,
         }),
         window.api.db.getDbCategories(),
         selectedDate
-          ? window.api.db.getTransactions({ start_date: selectedDate, end_date: selectedDate, transaction_type: 'expense' })
+          ? window.api.db.getTransactions({
+              ...(accountFilter ? { card_id: accountFilter.startsWith('card-') ? parseInt(accountFilter.replace('card-', '')) : undefined } : {}),
+              ...(accountFilter ? { bank_account_id: accountFilter.startsWith('bank-') ? parseInt(accountFilter.replace('bank-', '')) : undefined } : {}),
+              start_date: selectedDate,
+              end_date: selectedDate,
+              transaction_type: 'expense',
+            })
           : Promise.resolve([]),
+        window.api.db.getCards(),
+        window.api.db.getBankAccounts(),
       ])
       setDailySpending(spending)
       setCategories(cats)
+      setCards(cardsData)
+      setBankAccounts(bankAccountsData)
       if (selectedDate) {
         setDayTransactions(txs)
       }
@@ -53,7 +65,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     load()
-  }, [currentMonth, selectedDate, pathname])
+  }, [currentMonth, selectedDate, pathname, accountFilter])
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0)
@@ -102,8 +114,30 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <select
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
+          >
+            <option value="">All Accounts</option>
+            <optgroup label="Cards">
+              {cards.map((card) => (
+                <option key={`card-${card.id}`} value={`card-${card.id}`}>
+                  {card.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Bank Accounts">
+              {bankAccounts.map((account) => (
+                <option key={`bank-${account.id}`} value={`bank-${account.id}`}>
+                  {account.name}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}

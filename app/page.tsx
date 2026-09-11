@@ -317,13 +317,21 @@ function BankModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (valu
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Institution (optional)</label>
-            <input
+            <label className="block text-sm font-medium mb-1">Institution</label>
+            <select
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
               className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
-              placeholder="e.g. Bank of America"
-            />
+            >
+              <option value="">Select institution</option>
+              <option value="bofa_checking">Bank of America - Checking</option>
+              <option value="chase">Chase</option>
+              <option value="citi">Citi</option>
+              <option value="synchrony">Synchrony</option>
+              <option value="bestbuy">Best Buy</option>
+              <option value="paypal">PayPal</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Type</label>
@@ -389,13 +397,22 @@ function CardModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (valu
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Institution (optional)</label>
-            <input
+            <label className="block text-sm font-medium mb-1">Institution</label>
+            <select
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
               className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
-              placeholder="e.g. Chase"
-            />
+            >
+              <option value="">Select institution</option>
+              <option value="bofa_credit">Bank of America - Credit Card</option>
+              <option value="bofa_checking">Bank of America - Checking</option>
+              <option value="chase_amazon">Chase Amazon</option>
+              <option value="citi_costco">Citi Costco</option>
+              <option value="synchrony">Synchrony</option>
+              <option value="bestbuy">Best Buy</option>
+              <option value="paypal">PayPal</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Type</label>
@@ -487,11 +504,20 @@ function EditBankModal({ account, onClose, onSubmit }: { account: BankAccount; o
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Institution</label>
-            <input
+            <select
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
               className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
-            />
+            >
+              <option value="">Select institution</option>
+              <option value="bofa_checking">Bank of America - Checking</option>
+              <option value="chase">Chase</option>
+              <option value="citi">Citi</option>
+              <option value="synchrony">Synchrony</option>
+              <option value="bestbuy">Best Buy</option>
+              <option value="paypal">PayPal</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Type</label>
@@ -557,11 +583,21 @@ function EditCardModal({ card, onClose, onSubmit }: { card: Card; onClose: () =>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Institution</label>
-            <input
+            <select
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
               className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
-            />
+            >
+              <option value="">Select institution</option>
+              <option value="bofa_credit">Bank of America - Credit Card</option>
+              <option value="bofa_checking">Bank of America - Checking</option>
+              <option value="chase_amazon">Chase Amazon</option>
+              <option value="citi_costco">Citi Costco</option>
+              <option value="synchrony">Synchrony</option>
+              <option value="bestbuy">Best Buy</option>
+              <option value="paypal">PayPal</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Type</label>

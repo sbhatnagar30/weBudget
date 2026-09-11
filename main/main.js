@@ -68,6 +68,8 @@ function registerIpcHandlers() {
   ipcMain.handle('db:deleteBankAccount', (_, id) => db.deleteBankAccount(id));
 
   ipcMain.handle('db:getTransactions', (_, filters) => db.getTransactions(filters));
+  ipcMain.handle('db:getBankTransactions', (_, filters) => db.getBankTransactions(filters));
+  ipcMain.handle('db:getTransactionsForStatement', (_, statementFile) => db.getTransactionsForStatement(statementFile));
   ipcMain.handle('db:getTransaction', (_, id) => db.getTransaction(id));
   ipcMain.handle('db:addTransaction', (_, tx) => db.addTransaction(tx));
   ipcMain.handle('db:addTransactionsBatch', (_, txs) => db.addTransactionsBatch(txs));
@@ -80,6 +82,7 @@ function registerIpcHandlers() {
   ipcMain.handle('db:getStatementUploads', () => db.getStatementUploads());
   ipcMain.handle('db:getStatementUpload', (_, id) => db.getStatementUpload(id));
   ipcMain.handle('db:addStatementUpload', (_, upload) => db.addStatementUpload(upload));
+  ipcMain.handle('db:deleteStatementUpload', (_, id) => db.deleteStatementUpload(id));
 
   ipcMain.handle('db:getMonthlySpendingByCategory', (_, filters) => db.getMonthlySpendingByCategory(filters));
   ipcMain.handle('db:getDailySpending', (_, filters) => db.getDailySpending(filters));
@@ -94,6 +97,10 @@ function registerIpcHandlers() {
   ipcMain.handle('db:deleteDbCategory', (_, id) => db.deleteDbCategory(id));
   ipcMain.handle('db:getMissingStatementMonths', (_, cardId) => db.getMissingStatementMonths(cardId));
 
+  ipcMain.handle('db:exportBackup', (_, filters) => db.exportBackup(filters));
+  ipcMain.handle('db:importBackup', (_, backupData) => db.importBackup(backupData));
+  ipcMain.handle('db:applyImport', (_, importData, resolutions) => db.applyImport(importData, resolutions));
+
   ipcMain.handle('dialog:openFile', async (_, options) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
@@ -103,13 +110,16 @@ function registerIpcHandlers() {
     return result.filePaths[0];
   });
 
-  ipcMain.handle('parse:pdf', async (_, filePath) => {
+  ipcMain.handle('parse:getSupportedInstitutions', () => {
+    const { getSupportedInstitutions } = require('./statement-parser');
+    return getSupportedInstitutions();
+  });
+
+  ipcMain.handle('parse:pdf', async (_, filePath, institution) => {
     try {
-      const dataBuffer = fs.readFileSync(filePath);
-      const pdfParse = require('pdf-parse');
-      const data = await pdfParse(dataBuffer);
-      const parsed = parseStatementText(data.text);
-      return { success: true, text: data.text, transactions: parsed };
+      const { parseStatement } = require('./statement-parser');
+      const result = await parseStatement(filePath, institution);
+      return result;
     } catch (error) {
       return { success: false, error: error.message };
     }

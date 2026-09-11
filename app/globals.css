@@ -33,6 +33,12 @@
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+
+  select,
+  select option {
+    background-color: #0a0a0a;
+    color: #ededed;
+  }
 }
 
 body {

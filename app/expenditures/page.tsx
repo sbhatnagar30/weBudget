@@ -2,13 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import MonthPicker from '../components/MonthPicker'
+import MonthRangePicker from '../components/ui/MonthRangePicker'
 import type { Card, Transaction } from '../../types/electron'
-
-const AUTO_COLORS = [
-  '#64748b', '#9cb8a2', '#d4a574', '#c48b8b', '#7ba7c9',
-  '#9b8fb8', '#5f9ea0', '#cd853f', '#8fbc8f', '#bc8f8f'
-]
+import { AUTO_COLORS } from '../lib/constants'
 
 export default function ExpendituresPage() {
   const pathname = usePathname()
@@ -18,8 +14,7 @@ export default function ExpendituresPage() {
   const [loading, setLoading] = useState(true)
 
   const [cardFilter, setCardFilter] = useState<string>('')
-  const [startMonth, setStartMonth] = useState('')
-  const [endMonth, setEndMonth] = useState('')
+  const [dateRange, setDateRange] = useState<{ start?: Date; end?: Date }>({})
 
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<any | null>(null)
@@ -27,14 +22,12 @@ export default function ExpendituresPage() {
   const [categoryColor, setCategoryColor] = useState(AUTO_COLORS[0])
 
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedTxIds, setSelectedTxIds] = useState<Set<number>>(new Set())
+  const [batchCategory, setBatchCategory] = useState('')
 
-  const startDate = startMonth ? `${startMonth}-01` : ''
-  const endDate = (() => {
-    if (!endMonth) return ''
-    const [year, month] = endMonth.split('-').map(Number)
-    const lastDay = new Date(year, month, 0).getDate()
-    return `${endMonth}-${String(lastDay).padStart(2, '0')}`
-  })()
+  const startDate = dateRange.start ? `${dateRange.start.getFullYear()}-${String(dateRange.start.getMonth() + 1).padStart(2, '0')}-01` : ''
+  const endDate = dateRange.end ? `${dateRange.end.getFullYear()}-${String(dateRange.end.getMonth() + 1).padStart(2, '0')}-${new Date(dateRange.end.getFullYear(), dateRange.end.getMonth() + 1, 0).getDate()}` : ''
 
   const load = async () => {
     setLoading(true)
@@ -61,7 +54,7 @@ export default function ExpendituresPage() {
 
   useEffect(() => {
     load()
-  }, [pathname, cardFilter, startMonth, endMonth])
+  }, [pathname, cardFilter, dateRange])
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0)
@@ -160,6 +153,52 @@ export default function ExpendituresPage() {
 
   const expandAll = () => {
     setCollapsedCategories(new Set())
+  }
+
+  const toggleBatchMode = () => {
+    setBatchMode((prev) => {
+      const next = !prev
+      if (!next) setSelectedTxIds(new Set())
+      return next
+    })
+  }
+
+  const toggleSelectTx = (txId: number) => {
+    setSelectedTxIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(txId)) {
+        next.delete(txId)
+      } else {
+        next.add(txId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedTxIds.size === transactions.length) {
+      setSelectedTxIds(new Set())
+      return
+    }
+    setSelectedTxIds(new Set(transactions.map((tx) => tx.id)))
+  }
+
+  const handleBatchCategoryApply = async () => {
+    if (!batchCategory || selectedTxIds.size === 0) return
+    try {
+      const updates = transactions
+        .filter((tx) => selectedTxIds.has(tx.id))
+        .map((tx) => window.api.db.updateTransaction(tx.id, { category: batchCategory }))
+
+      await Promise.all(updates)
+      setSelectedTxIds(new Set())
+      setBatchCategory('')
+      setBatchMode(false)
+      await load()
+    } catch (err) {
+      console.error('Failed to batch categorize', err)
+      alert('Failed to batch categorize. Please try again.')
+    }
   }
 
   const groupedTransactions = transactions.reduce((acc, tx) => {
@@ -264,16 +303,10 @@ export default function ExpendituresPage() {
           ))}
         </select>
 
-        <MonthPicker
-          value={startMonth}
-          onChange={setStartMonth}
-          placeholder="From Month"
-        />
-
-        <MonthPicker
-          value={endMonth}
-          onChange={setEndMonth}
-          placeholder="To Month"
+        <MonthRangePicker
+          value={dateRange.start || dateRange.end ? { start: dateRange.start || new Date(), end: dateRange.end || new Date() } : undefined}
+          onChange={(range) => setDateRange({ start: range.start, end: range.end })}
+          placeholder="Select month range"
         />
 
         <div className="flex gap-2 ml-auto">
@@ -289,8 +322,61 @@ export default function ExpendituresPage() {
           >
             Expand All
           </button>
+          <button
+            onClick={toggleBatchMode}
+            className={`rounded-md border px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 ${
+              batchMode
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-black/10 dark:border-white/10'
+            }`}
+          >
+            {batchMode ? 'Cancel Batch' : 'Batch Categorize'}
+          </button>
         </div>
       </div>
+
+      {batchMode && (
+        <div className="flex items-center justify-between rounded-lg border border-black/10 dark:border-white/10 bg-zinc-50 dark:bg-zinc-900 px-4 py-2">
+          <div className="flex items-center gap-3 text-sm">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedTxIds.size === transactions.length && transactions.length > 0}
+                onChange={toggleSelectAll}
+                className="rounded border-black/20"
+              />
+              <span className="font-medium">Select All</span>
+            </label>
+            <span className="text-zinc-500">
+              {selectedTxIds.size === 0
+                ? 'No transactions selected'
+                : `${selectedTxIds.size} selected`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={batchCategory}
+              onChange={(e) => setBatchCategory(e.target.value)}
+              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
+            >
+              <option value="">Assign to category...</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+              <option value="uncategorized">Uncategorized</option>
+            </select>
+            <button
+              onClick={handleBatchCategoryApply}
+              disabled={!batchCategory || selectedTxIds.size === 0}
+              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-50 hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-5 2xl:grid-cols-9 gap-4">
         {allCategoryNames.map((catName) => {
@@ -351,44 +437,54 @@ export default function ExpendituresPage() {
                       onDragStart={(e) => handleDragStart(e, tx.id)}
                       onDragEnd={handleDragEnd}
                       onDragOver={(e) => e.preventDefault()}
-                      className="p-4 text-sm cursor-move hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                      className={`p-4 text-sm ${batchMode ? 'cursor-default' : 'cursor-move hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-medium truncate">{tx.description}</p>
-                            <span className="text-[10px] text-zinc-500 whitespace-nowrap">{cardNameMap[tx.card_id] || `Card ${tx.card_id}`}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <p className="text-xs text-zinc-500">{tx.date}</p>
-                            <select
-                              draggable={false}
-                              value={tx.category === 'other' ? 'uncategorized' : tx.category}
-                              onChange={(e) => handleCategoryChange(tx.id, e.target.value)}
-                              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-xs"
-                            >
-                              {categories.map((cat) => (
-                                <option key={cat.id} value={cat.name}>
-                                  {cat.name}
-                                </option>
-                              ))}
-                              <option value="uncategorized">Uncategorized</option>
-                            </select>
-                          </div>
-                          <div className="mt-2">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          {batchMode && (
                             <input
-                              type="text"
-                              draggable={false}
-                              defaultValue={tx.note || ''}
-                              onBlur={(e) => {
-                                const note = e.target.value
-                                if (note !== (tx.note || '')) {
-                                  handleNoteChange(tx.id, note)
-                                }
-                              }}
-                              placeholder="Add a note..."
-                              className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-xs text-zinc-600 dark:text-zinc-400 placeholder:text-zinc-400"
+                              type="checkbox"
+                              checked={selectedTxIds.has(tx.id)}
+                              onChange={() => toggleSelectTx(tx.id)}
+                              className="mt-1 rounded border-black/20"
                             />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium truncate">{tx.description}</p>
+                              <span className="text-[10px] text-zinc-500 whitespace-nowrap">{cardNameMap[tx.card_id] || `Card ${tx.card_id}`}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <p className="text-xs text-zinc-500">{tx.date}</p>
+                              <select
+                                draggable={false}
+                                value={tx.category === 'other' ? 'uncategorized' : tx.category}
+                                onChange={(e) => handleCategoryChange(tx.id, e.target.value)}
+                                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-xs"
+                              >
+                                {categories.map((cat) => (
+                                  <option key={cat.id} value={cat.name}>
+                                    {cat.name}
+                                  </option>
+                                ))}
+                                <option value="uncategorized">Uncategorized</option>
+                              </select>
+                            </div>
+                            <div className="mt-2">
+                              <input
+                                type="text"
+                                draggable={false}
+                                defaultValue={tx.note || ''}
+                                onBlur={(e) => {
+                                  const note = e.target.value
+                                  if (note !== (tx.note || '')) {
+                                    handleNoteChange(tx.id, note)
+                                  }
+                                }}
+                                placeholder="Add a note..."
+                                className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-xs text-zinc-600 dark:text-zinc-400 placeholder:text-zinc-400"
+                              />
+                            </div>
                           </div>
                         </div>
                         <p className="font-medium tabular-nums whitespace-nowrap">{formatCurrency(tx.amount)}</p>

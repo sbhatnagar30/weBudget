@@ -46,7 +46,8 @@ async function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      card_id INTEGER NOT NULL,
+      card_id INTEGER,
+      bank_account_id INTEGER,
       date TEXT NOT NULL,
       description TEXT NOT NULL,
       amount REAL NOT NULL,
@@ -55,10 +56,11 @@ async function initDatabase() {
       statement_file TEXT,
       note TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+      FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE,
+      FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE CASCADE
     );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_unique ON transactions(card_id, date, description, amount);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_unique ON transactions(card_id, bank_account_id, date, description, amount);
 
     CREATE TABLE IF NOT EXISTS interest_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,13 +76,16 @@ async function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS statement_uploads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      card_id INTEGER NOT NULL,
+      card_id INTEGER,
+      bank_account_id INTEGER,
       statement_month TEXT NOT NULL,
       source_file TEXT NOT NULL,
       transaction_count INTEGER NOT NULL DEFAULT 0,
+      institution TEXT,
       imported_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE,
-      UNIQUE(card_id, statement_month)
+      FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE CASCADE,
+      UNIQUE(card_id, bank_account_id, statement_month)
     );
 
     CREATE TABLE IF NOT EXISTS categories (
@@ -251,19 +256,44 @@ function deleteBankAccount(id) {
   return changed > 0;
 }
 
+function getBankTransactions(filters = {}) {
+  const conditions = ['bank_account_id IS NOT NULL'];
+  const params = [];
+
+  if (filters.bank_account_id) { conditions.push('bank_account_id = ?'); params.push(filters.bank_account_id); }
+  if (filters.category) { conditions.push('category = ?'); params.push(filters.category); }
+  if (filters.start_date) { conditions.push('date >= ?'); params.push(filters.start_date); }
+  if (filters.end_date) { conditions.push('date <= ?'); params.push(filters.end_date); }
+  if (filters.transaction_type) { conditions.push('transaction_type = ?'); params.push(filters.transaction_type); }
+  if (filters.statement_file) { conditions.push('statement_file = ?'); params.push(filters.statement_file); }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const stmt = prepare(`SELECT * FROM transactions ${where} ORDER BY date DESC, id DESC`);
+  stmt.bind(params);
+  return getRowsAsObjects(stmt);
+}
+
 function getTransactions(filters = {}) {
   const conditions = [];
   const params = [];
 
   if (filters.card_id) { conditions.push('card_id = ?'); params.push(filters.card_id); }
+  if (filters.bank_account_id) { conditions.push('bank_account_id = ?'); params.push(filters.bank_account_id); }
   if (filters.category) { conditions.push('category = ?'); params.push(filters.category); }
   if (filters.start_date) { conditions.push('date >= ?'); params.push(filters.start_date); }
   if (filters.end_date) { conditions.push('date <= ?'); params.push(filters.end_date); }
   if (filters.transaction_type) { conditions.push('transaction_type = ?'); params.push(filters.transaction_type); }
+  if (filters.statement_file) { conditions.push('statement_file = ?'); params.push(filters.statement_file); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const stmt = prepare(`SELECT * FROM transactions ${where} ORDER BY date DESC, id DESC`);
   stmt.bind(params);
+  return getRowsAsObjects(stmt);
+}
+
+function getTransactionsForStatement(statementFile) {
+  const stmt = prepare('SELECT * FROM transactions WHERE statement_file = ? ORDER BY date DESC, id DESC');
+  stmt.bind([statementFile]);
   return getRowsAsObjects(stmt);
 }
 
@@ -281,9 +311,9 @@ function getTransaction(id) {
 
 function addTransaction(transaction) {
   run(
-    `INSERT INTO transactions (card_id, date, description, amount, category, transaction_type, statement_file, note)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [transaction.card_id, transaction.date, transaction.description, transaction.amount, transaction.category || 'other', transaction.transaction_type || 'expense', transaction.statement_file || null, transaction.note || null]
+    `INSERT INTO transactions (card_id, bank_account_id, date, description, amount, category, transaction_type, statement_file, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [transaction.card_id || null, transaction.bank_account_id || null, transaction.date, transaction.description, transaction.amount, transaction.category || 'other', transaction.transaction_type || 'expense', transaction.statement_file || null, transaction.note || null]
   );
   const id = lastInsertRowid();
   saveDatabase();
@@ -298,9 +328,9 @@ function addTransactionsBatch(transactions) {
   try {
     for (const tx of transactions) {
       run(
-        `INSERT OR IGNORE INTO transactions (card_id, date, description, amount, category, transaction_type, statement_file, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [tx.card_id, tx.date, tx.description, tx.amount, tx.category || 'other', tx.transaction_type || 'expense', tx.statement_file || null, tx.note || null]
+        `INSERT OR IGNORE INTO transactions (card_id, bank_account_id, date, description, amount, category, transaction_type, statement_file, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [tx.card_id || null, tx.bank_account_id || null, tx.date, tx.description, tx.amount, tx.category || 'other', tx.transaction_type || 'expense', tx.statement_file || null, tx.note || null]
       );
       const changed = changes();
       if (changed > 0) {
@@ -369,10 +399,11 @@ function addInterestSnapshot(snapshot) {
 
 function getStatementUploads() {
   const stmt = prepare(`
-    SELECT su.*, c.name as card_name, c.institution as card_institution
+    SELECT su.*, c.name as card_name, c.institution as card_institution, ba.name as bank_name, ba.institution as bank_institution
     FROM statement_uploads su
-    JOIN cards c ON c.id = su.card_id
-    ORDER BY su.statement_month DESC, c.name ASC
+    LEFT JOIN cards c ON c.id = su.card_id
+    LEFT JOIN bank_accounts ba ON ba.id = su.bank_account_id
+    ORDER BY su.statement_month DESC, COALESCE(c.name, ba.name) ASC
   `);
   return getRowsAsObjects(stmt);
 }
@@ -391,12 +422,41 @@ function getStatementUpload(id) {
 
 function addStatementUpload(upload) {
   run(
-    `INSERT OR REPLACE INTO statement_uploads (card_id, statement_month, source_file, transaction_count)
-     VALUES (?, ?, ?, ?)`,
-    [upload.card_id, upload.statement_month, upload.source_file, upload.transaction_count]
+    `INSERT OR REPLACE INTO statement_uploads (card_id, bank_account_id, statement_month, source_file, transaction_count, institution)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [upload.card_id || null, upload.bank_account_id || null, upload.statement_month, upload.source_file, upload.transaction_count, upload.institution || null]
   );
   saveDatabase();
   const id = lastInsertRowid();
+  return getStatementUpload(id);
+}
+
+function deleteStatementUpload(id) {
+  const upload = getStatementUpload(id);
+  if (!upload) return false;
+
+  run('DELETE FROM transactions WHERE statement_file = ?', [upload.source_file]);
+  run('DELETE FROM statement_uploads WHERE id = ?', [id]);
+  saveDatabase();
+  return true;
+}
+
+function updateStatementUpload(id, updates) {
+  const fields = [];
+  const params = [];
+
+  if (updates.card_id !== undefined) { fields.push('card_id = ?'); params.push(updates.card_id); }
+  if (updates.bank_account_id !== undefined) { fields.push('bank_account_id = ?'); params.push(updates.bank_account_id); }
+  if (updates.statement_month !== undefined) { fields.push('statement_month = ?'); params.push(updates.statement_month); }
+  if (updates.source_file !== undefined) { fields.push('source_file = ?'); params.push(updates.source_file); }
+  if (updates.transaction_count !== undefined) { fields.push('transaction_count = ?'); params.push(updates.transaction_count); }
+  if (updates.institution !== undefined) { fields.push('institution = ?'); params.push(updates.institution); }
+
+  if (fields.length === 0) return getStatementUpload(id);
+
+  params.push(id);
+  run(`UPDATE statement_uploads SET ${fields.join(', ')} WHERE id = ?`, params);
+  saveDatabase();
   return getStatementUpload(id);
 }
 
@@ -428,6 +488,7 @@ function getDailySpending(filters = {}) {
   const params = ['expense'];
 
   if (filters.card_id) { conditions.push('card_id = ?'); params.push(filters.card_id); }
+  if (filters.bank_account_id) { conditions.push('bank_account_id = ?'); params.push(filters.bank_account_id); }
   if (filters.start_date) { conditions.push('date >= ?'); params.push(filters.start_date); }
   if (filters.end_date) { conditions.push('date <= ?'); params.push(filters.end_date); }
 
@@ -516,6 +577,185 @@ function getMissingStatementMonths(cardId) {
   return getRowsAsObjects(stmt).map((r) => r.month);
 }
 
+function exportBackup(filters = {}) {
+  const result = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    dateRange: {
+      start: filters.start_date || null,
+      end: filters.end_date || null,
+    },
+    data: {
+      cards: getCards(),
+      bankAccounts: getBankAccounts(),
+      categories: getDbCategories(),
+      transactions: getTransactions(filters),
+      statementUploads: getStatementUploads(),
+    },
+  };
+  return result;
+}
+
+function importBackup(backupData) {
+  if (!backupData || !backupData.data) {
+    throw new Error('Invalid backup file format');
+  }
+
+  const { cards, bankAccounts, categories, transactions, statementUploads } = backupData.data;
+  const conflicts = [];
+  const toAdd = [];
+  const toUpdate = [];
+
+  const existingCards = getCards();
+  const existingBankAccounts = getBankAccounts();
+  const existingCategories = getDbCategories();
+  const existingTransactions = getTransactions();
+  const existingUploads = getStatementUploads();
+
+  const cardMap = new Map(existingCards.map((c) => [c.id, c]));
+  const bankAccountMap = new Map(existingBankAccounts.map((b) => [b.id, b]));
+  const categoryMap = new Map(existingCategories.map((c) => [c.name, c]));
+  const txKeyMap = new Map(
+    existingTransactions.map((tx) => [
+      `${tx.card_id || tx.bank_account_id}-${tx.date}-${tx.description}-${tx.amount}`,
+      tx,
+    ])
+  );
+  const uploadMap = new Map(existingUploads.map((u) => [u.source_file, u]));
+
+  for (const card of cards || []) {
+    const existing = cardMap.get(card.id);
+    if (!existing) {
+      toAdd.push({ type: 'card', data: card });
+    } else if (existing.updated_at !== card.updated_at) {
+      conflicts.push({
+        type: 'card',
+        existing,
+        incoming: card,
+        resolution: null,
+      });
+    }
+  }
+
+  for (const bankAccount of bankAccounts || []) {
+    const existing = bankAccountMap.get(bankAccount.id);
+    if (!existing) {
+      toAdd.push({ type: 'bankAccount', data: bankAccount });
+    } else if (existing.updated_at !== bankAccount.updated_at) {
+      conflicts.push({
+        type: 'bankAccount',
+        existing,
+        incoming: bankAccount,
+        resolution: null,
+      });
+    }
+  }
+
+  for (const category of categories || []) {
+    const existing = categoryMap.get(category.name);
+    if (!existing) {
+      toAdd.push({ type: 'category', data: category });
+    } else if (existing.color !== category.color) {
+      conflicts.push({
+        type: 'category',
+        existing,
+        incoming: category,
+        resolution: null,
+      });
+    }
+  }
+
+  for (const tx of transactions || []) {
+    const key = `${tx.card_id || tx.bank_account_id}-${tx.date}-${tx.description}-${tx.amount}`;
+    const existing = txKeyMap.get(key);
+    if (!existing) {
+      toAdd.push({ type: 'transaction', data: tx });
+    } else if (existing.updated_at !== tx.updated_at) {
+      conflicts.push({
+        type: 'transaction',
+        existing,
+        incoming: tx,
+        resolution: null,
+      });
+    }
+  }
+
+  for (const upload of statementUploads || []) {
+    const existing = uploadMap.get(upload.source_file);
+    if (!existing) {
+      toAdd.push({ type: 'statementUpload', data: upload });
+    } else if (existing.imported_at !== upload.imported_at) {
+      conflicts.push({
+        type: 'statementUpload',
+        existing,
+        incoming: upload,
+        resolution: null,
+      });
+    }
+  }
+
+  return {
+    conflicts,
+    toAdd,
+    toUpdate,
+    summary: {
+      totalConflicts: conflicts.length,
+      totalToAdd: toAdd.length,
+      totalToUpdate: toUpdate.length,
+    },
+  };
+}
+
+function applyImport(importData, conflictResolutions) {
+  for (const item of importData.toAdd) {
+    switch (item.type) {
+      case 'card':
+        addCard(item.data);
+        break;
+      case 'bankAccount':
+        addBankAccount(item.data);
+        break;
+      case 'category':
+        addDbCategory(item.data);
+        break;
+      case 'transaction':
+        addTransaction(item.data);
+        break;
+      case 'statementUpload':
+        addStatementUpload(item.data);
+        break;
+    }
+  }
+
+  for (let i = 0; i < importData.conflicts.length; i++) {
+    const conflict = importData.conflicts[i];
+    const resolution = conflictResolutions[i];
+    if (resolution === 'incoming') {
+      switch (conflict.type) {
+        case 'card':
+          updateCard(conflict.existing.id, conflict.incoming);
+          break;
+        case 'bankAccount':
+          updateBankAccount(conflict.existing.id, conflict.incoming);
+          break;
+        case 'category':
+          updateDbCategory(conflict.existing.id, conflict.incoming);
+          break;
+        case 'transaction':
+          updateTransaction(conflict.existing.id, conflict.incoming);
+          break;
+        case 'statementUpload':
+          updateStatementUpload(conflict.existing.id, conflict.incoming);
+          break;
+      }
+    }
+    // If 'existing', do nothing
+  }
+
+  saveDatabase();
+  return true;
+}
+
 function getDbCategories() {
   const stmt = prepare('SELECT * FROM categories ORDER BY name');
   return getRowsAsObjects(stmt);
@@ -580,6 +820,8 @@ module.exports = {
   updateBankAccount,
   deleteBankAccount,
   getTransactions,
+  getBankTransactions,
+  getTransactionsForStatement,
   getTransaction,
   addTransaction,
   addTransactionsBatch,
@@ -590,6 +832,7 @@ module.exports = {
   getStatementUploads,
   getStatementUpload,
   addStatementUpload,
+  deleteStatementUpload,
   getMonthlySpendingByCategory,
   getDailySpending,
   getCardMonthlySummary,
@@ -602,4 +845,8 @@ module.exports = {
   updateDbCategory,
   deleteDbCategory,
   getMissingStatementMonths,
+  updateStatementUpload,
+  exportBackup,
+  importBackup,
+  applyImport,
 };
