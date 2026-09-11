@@ -206,13 +206,13 @@ export default function ExpendituresPage() {
     if (!acc[cat]) acc[cat] = []
     acc[cat].push(tx)
     return acc
-  }, {})
+  }, {} as Record<string, Transaction[]>)
 
   const categoryNames = categories.map(c => c.name).filter(c => c !== 'uncategorized')
   const uncategorized = groupedTransactions['uncategorized'] || []
 
   const getCategoryTotal = (catName: string) => {
-    return groupedTransactions[catName]?.reduce((sum, tx) => sum + tx.amount, 0) || 0
+    return (groupedTransactions[catName] || []).reduce((sum: number, tx: Transaction) => sum + tx.amount, 0)
   }
 
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
@@ -275,7 +275,7 @@ export default function ExpendituresPage() {
     )
   }
 
-  const allCategoryNames = [...categoryNames, 'uncategorized']
+  const allCategoryNames: string[] = [...categoryNames, 'uncategorized']
 
   return (
     <div className="space-y-6">
@@ -452,7 +452,7 @@ export default function ExpendituresPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <p className="font-medium truncate">{tx.description}</p>
-                              <span className="text-[10px] text-zinc-500 whitespace-nowrap">{cardNameMap[tx.card_id] || `Card ${tx.card_id}`}</span>
+                              <span className="text-[10px] text-zinc-500 whitespace-nowrap">{tx.card_id ? cardNameMap[tx.card_id] : `Bank Acct ${tx.bank_account_id}`}</span>
                             </div>
                             <div className="flex items-center gap-3">
                               <p className="text-xs text-zinc-500">{tx.date}</p>

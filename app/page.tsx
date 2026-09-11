@@ -418,7 +418,7 @@ function CardModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (valu
             <label className="block text-sm font-medium mb-1">Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value)}
+              onChange={(e) => setType(e.target.value as 'credit' | 'debit')}
               className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
             >
               <option value="credit">Credit</option>
@@ -603,7 +603,7 @@ function EditCardModal({ card, onClose, onSubmit }: { card: Card; onClose: () =>
             <label className="block text-sm font-medium mb-1">Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value)}
+              onChange={(e) => setType(e.target.value as 'credit' | 'debit')}
               className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-1.5 text-sm"
             >
               <option value="credit">Credit</option>
