@@ -337,9 +337,18 @@ async function registerIpcHandlers() {
     return result.filePaths[0];
   });
 
-  ipcMain.handle('fs:readFile', (_, filePath) => {
-    const data = fs.readFileSync(filePath, 'utf-8');
-    return data;
+  ipcMain.handle('dialog:saveFile', async (_, options) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: options.defaultPath,
+      filters: options.filters || [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (result.canceled) return null;
+    return result.filePath;
+  });
+
+  ipcMain.handle('fs:writeFile', (_, filePath, data) => {
+    fs.writeFileSync(filePath, data);
+    return true;
   });
 
   ipcMain.handle('parse:getSupportedInstitutions', () => {

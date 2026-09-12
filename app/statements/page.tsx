@@ -242,13 +242,16 @@ export default function StatementsPage() {
         filters.end_date = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`
       }
       const backup = await window.api.db.exportBackup(filters)
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `webudget-backup-${exportRange === 'month' && exportMonth ? exportMonth : 'all'}-${new Date().toISOString().split('T')[0]}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+      const defaultName = `webudget-backup-${exportRange === 'month' && exportMonth ? exportMonth : 'all'}-${new Date().toISOString().split('T')[0]}.json`
+      const filePath = await window.api.dialog.saveFile({
+        defaultPath: defaultName,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (!filePath) {
+        setExportOpen(false)
+        return
+      }
+      await window.api.fs.writeFile(filePath, JSON.stringify(backup, null, 2))
       setExportOpen(false)
     } catch (e) {
       console.error('Export failed', e)

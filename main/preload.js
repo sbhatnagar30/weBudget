@@ -79,10 +79,12 @@ contextBridge.exposeInMainWorld('api', {
 
   dialog: {
     openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
+    saveFile: (options) => ipcRenderer.invoke('dialog:saveFile', options),
   },
 
   fs: {
     readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
+    writeFile: (filePath, data) => ipcRenderer.invoke('fs:writeFile', filePath, data),
   },
 
   parsePdf: (filePath, institution) => ipcRenderer.invoke('parse:pdf', filePath, institution),

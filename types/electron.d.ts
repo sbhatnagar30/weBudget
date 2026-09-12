@@ -140,9 +140,11 @@ declare global {
       };
       dialog: {
         openFile: (options?: { filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
+        saveFile: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
       };
       fs: {
         readFile: (filePath: string) => Promise<string>;
+        writeFile: (filePath: string, data: string) => Promise<boolean>;
       };
       parsePdf: (filePath: string, institution?: string) => Promise<{ success: boolean; text?: string; transactions?: any[]; institution?: string; error?: string }>;
       getSupportedInstitutions: () => Promise<string[]>;
