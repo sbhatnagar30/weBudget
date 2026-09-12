@@ -266,10 +266,10 @@ export default function StatementsPage() {
     setImportFilePath(selected)
     setImportError(null)
     try {
-      const text = await (await fetch(selected)).text()
+      const text = await window.api.fs.readFile(selected)
       const backupData = JSON.parse(text)
       const preview = await window.api.db.importBackup(backupData)
-      setImportPreview(backupData)
+      setImportPreview(preview)
       setImportConflicts(preview.conflicts)
       setImportResolutions({})
     } catch (e) {

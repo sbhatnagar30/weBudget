@@ -184,7 +184,7 @@ function createMainWindow(port) {
   });
 
   const dev = !app.isPackaged;
-  const url = dev ? 'http://localhost:3000' : `http://localhost:${port || nextPort}`;
+  const url = dev ? `http://localhost:${port || nextPort}` : `http://localhost:${port || nextPort}`;
   debugLog(`Mode: ${dev ? 'dev' : 'production'}, Loading URL: ${url}`);
 
   mainWindow.loadURL(url).catch((err) => {
@@ -249,6 +249,36 @@ async function findAvailablePort(startPort, maxAttempts = 10) {
   });
 }
 
+async function findAvailableDevPort() {
+  debugLog('Finding dev server port...');
+  
+  const checkHttp = (port) => {
+    return new Promise((resolve) => {
+      const req = http.get(`http://localhost:${port}`, (res) => {
+        resolve(port);
+      });
+      req.on('error', () => resolve(null));
+      req.setTimeout(500, () => {
+        req.destroy();
+        resolve(null);
+      });
+    });
+  };
+
+  for (let port = 3000; port <= 3010; port++) {
+    debugLog(`Checking port ${port}...`);
+    const found = await checkHttp(port);
+    if (found) {
+      debugLog(`Found dev server on port ${found}`);
+      return found;
+    }
+  }
+
+  const fallbackPort = await findAvailablePort(3000);
+  debugLog(`No dev server found, using available port ${fallbackPort}`);
+  return fallbackPort;
+}
+
 async function registerIpcHandlers() {
   const db = database;
 
@@ -305,6 +335,11 @@ async function registerIpcHandlers() {
     });
     if (result.canceled) return null;
     return result.filePaths[0];
+  });
+
+  ipcMain.handle('fs:readFile', (_, filePath) => {
+    const data = fs.readFileSync(filePath, 'utf-8');
+    return data;
   });
 
   ipcMain.handle('parse:getSupportedInstitutions', () => {
@@ -374,6 +409,9 @@ app.on('ready', async () => {
       closeSplash();
       return;
     }
+  } else {
+    nextPort = await findAvailableDevPort();
+    debugLog(`Dev mode will use port ${nextPort}`);
   }
 
   debugLog(`Creating main window on port ${nextPort}...`);

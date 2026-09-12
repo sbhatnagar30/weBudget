@@ -81,6 +81,10 @@ contextBridge.exposeInMainWorld('api', {
     openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
   },
 
+  fs: {
+    readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
+  },
+
   parsePdf: (filePath, institution) => ipcRenderer.invoke('parse:pdf', filePath, institution),
   getSupportedInstitutions: () => ipcRenderer.invoke('parse:getSupportedInstitutions'),
 });
