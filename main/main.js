@@ -379,6 +379,11 @@ async function registerIpcHandlers() {
     }
     return null;
   });
+
+  ipcMain.handle('fs:readFile', (_, filePath) => {
+    const data = fs.readFileSync(filePath, 'utf-8');
+    return data;
+  });
 }
 
 app.on('ready', async () => {

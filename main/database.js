@@ -707,23 +707,44 @@ function importBackup(backupData) {
 }
 
 function applyImport(importData, conflictResolutions) {
+  const idMappings = {
+    cards: new Map(),
+    bankAccounts: new Map(),
+  };
+
   for (const item of importData.toAdd) {
     switch (item.type) {
-      case 'card':
-        addCard(item.data);
+      case 'card': {
+        const created = addCard(item.data);
+        idMappings.cards.set(item.data.id, created.id);
         break;
-      case 'bankAccount':
-        addBankAccount(item.data);
+      }
+      case 'bankAccount': {
+        const created = addBankAccount(item.data);
+        idMappings.bankAccounts.set(item.data.id, created.id);
         break;
+      }
       case 'category':
         addDbCategory(item.data);
         break;
-      case 'transaction':
-        addTransaction(item.data);
+      case 'transaction': {
+        const mapped = {
+          ...item.data,
+          card_id: item.data.card_id != null ? idMappings.cards.get(item.data.card_id) || item.data.card_id : null,
+          bank_account_id: item.data.bank_account_id != null ? idMappings.bankAccounts.get(item.data.bank_account_id) || item.data.bank_account_id : null,
+        };
+        addTransaction(mapped);
         break;
-      case 'statementUpload':
-        addStatementUpload(item.data);
+      }
+      case 'statementUpload': {
+        const mapped = {
+          ...item.data,
+          card_id: item.data.card_id != null ? idMappings.cards.get(item.data.card_id) || item.data.card_id : null,
+          bank_account_id: item.data.bank_account_id != null ? idMappings.bankAccounts.get(item.data.bank_account_id) || item.data.bank_account_id : null,
+        };
+        addStatementUpload(mapped);
         break;
+      }
     }
   }
 
@@ -749,7 +770,6 @@ function applyImport(importData, conflictResolutions) {
           break;
       }
     }
-    // If 'existing', do nothing
   }
 
   saveDatabase();
