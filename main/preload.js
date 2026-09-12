@@ -1,5 +1,33 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const suppressedMessages = [
+  'Cannot read properties of undefined (reading \'startTime\')',
+  "Cannot read properties of undefined (reading 'startTime')",
+];
+
+window.addEventListener('error', (event) => {
+  if (suppressedMessages.some((msg) => event.message?.includes(msg))) {
+    event.preventDefault();
+    return;
+  }
+
+  ipcRenderer.invoke('app:logError', {
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    stack: event.error?.stack || 'No stack trace',
+  }).catch(() => {});
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  ipcRenderer.invoke('app:logError', {
+    message: event.reason?.message || String(event.reason),
+    stack: event.reason?.stack || 'No stack trace',
+    type: 'unhandledrejection',
+  }).catch(() => {});
+});
+
 contextBridge.exposeInMainWorld('api', {
   db: {
     getCards: () => ipcRenderer.invoke('db:getCards'),

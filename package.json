@@ -39,6 +39,7 @@
   "build": {
     "appId": "com.webudget.app",
     "productName": "weBudget",
+    "icon": "assets/icon.png",
     "directories": {
       "output": "dist"
     },
@@ -46,6 +47,7 @@
       "main/**/*",
       "app/**/*",
       "types/**/*",
+      "assets/**/*",
       "package.json",
       ".next/**/*",
       "node_modules/**/*"

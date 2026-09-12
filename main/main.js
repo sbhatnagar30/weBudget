@@ -1,17 +1,181 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const http = require('http');
 const database = require('./database');
 const { parseStatementText } = require('./statement-parser');
 
+if (process.env.ELECTRON_RUN_AS_NODE) {
+  delete process.env.ELECTRON_RUN_AS_NODE;
+}
+
+const logPath = path.join(app.getPath('userData'), 'weBudget-debug.log');
+function debugLog(message) {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] ${message}`;
+  console.log(logMessage);
+  try {
+    fs.appendFileSync(logPath, logMessage + '\n');
+  } catch (e) {
+    // Ignore log write errors
+  }
+}
+
 let mainWindow;
 let nextServer = null;
+let nextPort = 3000;
+let splashWindow = null;
 
-function createMainWindow() {
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+};
+
+async function createStaticServer(port) {
+  const nextDir = path.join(__dirname, '..', '.next');
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url || '/', `http://localhost:${port}`);
+    let filePath = url.pathname;
+
+    if (filePath === '/') {
+      filePath = '/index.html';
+    }
+
+    const staticMatch = filePath.match(/^\/_next\/static\/(.+)$/);
+    if (staticMatch) {
+      const staticPath = path.join(nextDir, 'static', staticMatch[1]);
+      serveFile(staticPath, res);
+      return;
+    }
+
+    if (filePath === '/favicon.ico') {
+      serveFile(path.join(__dirname, '..', 'app', 'favicon.ico'), res);
+      return;
+    }
+
+    let htmlPath = path.join(nextDir, 'server', 'app', filePath);
+    if (!htmlPath.endsWith('.html')) {
+      htmlPath += '.html';
+    }
+
+    serveFile(htmlPath, res);
+  });
+
+  return new Promise((resolve) => {
+    server.listen(port, () => {
+      debugLog(`Static server ready on port ${port}`);
+      resolve(server);
+    });
+  });
+}
+
+function serveFile(filePath, res) {
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+
+    const ext = path.extname(filePath);
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(data);
+  });
+}
+
+async function startNextServer() {
+  debugLog('Starting static server...');
+  if (nextServer) {
+    debugLog('Static server already running');
+    return nextServer;
+  }
+
+  nextPort = await findAvailablePort(3000);
+  debugLog(`Starting static server on port ${nextPort}...`);
+  nextServer = await createStaticServer(nextPort);
+  return nextServer;
+}
+
+async function waitForNextServer() {
+  debugLog(`Waiting for static server at http://localhost:${nextPort}...`);
+  try {
+    await waitForServer(`http://localhost:${nextPort}`);
+    debugLog('Static server is ready');
+    return nextPort;
+  } catch (err) {
+    debugLog(`Failed to wait for static server: ${err.message}`);
+    throw err;
+  }
+}
+
+  function createSplashWindow() {
+    debugLog('Creating splash window...');
+    splashWindow = new BrowserWindow({
+      width: 400,
+      height: 300,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      resizable: false,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    const splashHtml = path.join(__dirname, '..', 'app', 'splash.html');
+    splashWindow.loadFile(splashHtml);
+    debugLog('Splash window created');
+  }
+
+function closeSplash() {
+  debugLog('Closing splash window...');
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close();
+  }
+  splashWindow = null;
+}
+
+function waitForServer(url, maxAttempts = 30) {
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      const req = http.get(url, (res) => {
+        if (res.statusCode === 200) {
+          clearInterval(interval);
+          resolve(true);
+        }
+      });
+      req.on('error', () => {
+        // Server not ready yet
+      });
+      req.setTimeout(2000, () => {
+        req.destroy();
+      });
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        reject(new Error(`Server at ${url} did not start within ${maxAttempts * 2} seconds`));
+      }
+    }, 2000);
+  });
+}
+
+function createMainWindow(port) {
+  debugLog('Creating main window...');
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -19,40 +183,73 @@ function createMainWindow() {
     },
   });
 
-  const dev = process.env.NODE_ENV !== 'production';
-  const url = dev ? 'http://localhost:3000' : 'http://localhost:3000';
+  const dev = !app.isPackaged;
+  const url = dev ? 'http://localhost:3000' : `http://localhost:${port || nextPort}`;
+  debugLog(`Mode: ${dev ? 'dev' : 'production'}, Loading URL: ${url}`);
 
-  mainWindow.loadURL(url).catch(() => {
-    setTimeout(() => mainWindow.loadURL(url), 500);
+  mainWindow.loadURL(url).catch((err) => {
+    debugLog(`Failed to load URL: ${err.message}`);
+    const errorPath = path.join(__dirname, '..', 'app', 'error.html');
+    mainWindow.loadFile(errorPath);
   });
 
   if (dev) {
+    debugLog('Opening DevTools in dev mode');
     mainWindow.webContents.openDevTools();
+  } else {
+    debugLog('DevTools disabled in production');
   }
   mainWindow.on('closed', () => {
+    debugLog('Main window closed');
     mainWindow = null;
+  });
+  mainWindow.once('ready-to-show', () => {
+    debugLog('Main window ready to show, closing splash');
+    closeSplash();
+  });
+  mainWindow.on('did-fail-load', (event, errorCode, errorDescription) => {
+    debugLog(`Failed to load: ${errorCode} - ${errorDescription}`);
+    const errorPath = path.join(__dirname, '..', 'app', 'error.html');
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.loadFile(errorPath);
+    }
   });
   mainWindow.maximize();
 }
 
-function startNextServer() {
-  if (nextServer) return nextServer;
+async function findAvailablePort(startPort, maxAttempts = 10) {
+  debugLog(`Finding available port starting from ${startPort}...`);
+  return new Promise((resolve) => {
+    const net = require('net');
+    let port = startPort;
+    let attempts = 0;
 
-  const nextBin = path.join(__dirname, '..', 'node_modules', 'next', 'dist', 'bin', 'next');
-  nextServer = spawn('node', [nextBin, 'start', '-p', '3000'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, NODE_ENV: 'production' },
-    stdio: 'ignore',
+    const checkPort = (portToCheck) => {
+      const server = net.createServer();
+      server.once('error', () => {
+        debugLog(`Port ${portToCheck} is in use, trying next...`);
+        attempts++;
+        if (attempts < maxAttempts) {
+          checkPort(portToCheck + 1);
+        } else {
+          server.close();
+          debugLog(`Max attempts reached, using port ${portToCheck}`);
+          resolve(portToCheck);
+        }
+      });
+      server.once('listening', () => {
+        debugLog(`Port ${portToCheck} is available`);
+        server.close();
+        resolve(portToCheck);
+      });
+      server.listen(portToCheck, '127.0.0.1');
+    };
+
+    checkPort(port);
   });
-
-  nextServer.on('error', (err) => {
-    console.error('Failed to start Next.js server:', err);
-  });
-
-  return nextServer;
 }
 
-function registerIpcHandlers() {
+async function registerIpcHandlers() {
   const db = database;
 
   ipcMain.handle('db:getCards', () => db.getCards());
@@ -124,22 +321,68 @@ function registerIpcHandlers() {
       return { success: false, error: error.message };
     }
   });
+
+  ipcMain.handle('app:logError', (_, errorInfo) => {
+    debugLog(`[Renderer Error] ${errorInfo.message}`);
+    if (errorInfo.filename) {
+      debugLog(`  File: ${errorInfo.filename}:${errorInfo.lineno}:${errorInfo.colno}`);
+    }
+    if (errorInfo.stack) {
+      debugLog(`  Stack: ${errorInfo.stack}`);
+    }
+    if (errorInfo.type) {
+      debugLog(`  Type: ${errorInfo.type}`);
+    }
+    return null;
+  });
 }
 
 app.on('ready', async () => {
-  await database.initPromise;
-  registerIpcHandlers();
+  debugLog('========================================');
+  debugLog('weBudget app starting...');
+  debugLog(`Platform: ${process.platform}`);
+  debugLog(`Architecture: ${process.arch}`);
+  debugLog(`Node version: ${process.version}`);
+  debugLog(`Electron version: ${process.versions.electron}`);
+  debugLog(`App is packaged: ${app.isPackaged}`);
+  debugLog(`NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
+  debugLog(`Debug log location: ${logPath}`);
+  debugLog('========================================');
 
-  if (process.env.NODE_ENV === 'production') {
-    startNextServer();
+  await database.initPromise;
+  debugLog('Database initialized');
+  await registerIpcHandlers();
+  debugLog('IPC handlers registered');
+
+  const isProduction = app.isPackaged || process.env.NODE_ENV === 'production';
+  debugLog(`Running in ${isProduction ? 'production' : 'development'} mode`);
+
+  if (isProduction) {
+    debugLog('Starting splash window...');
+    createSplashWindow();
+    try {
+      await startNextServer();
+      debugLog('Waiting for static server to be ready...');
+      nextPort = await waitForNextServer();
+      debugLog(`Static server is ready on port ${nextPort}`);
+    } catch (err) {
+      debugLog(`Failed to start static server: ${err.message}`);
+      const errorPath = path.join(__dirname, '..', 'app', 'error.html');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadFile(errorPath);
+      }
+      closeSplash();
+      return;
+    }
   }
 
-  setTimeout(createMainWindow, process.env.NODE_ENV === 'production' ? 1000 : 0);
+  debugLog(`Creating main window on port ${nextPort}...`);
+  createMainWindow(nextPort);
 });
 
 app.on('window-all-closed', () => {
   if (nextServer) {
-    nextServer.kill();
+    nextServer.close();
     nextServer = null;
   }
   if (process.platform !== 'darwin') {
@@ -149,6 +392,6 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (mainWindow === null) {
-    createMainWindow();
+    createMainWindow(nextPort);
   }
 });

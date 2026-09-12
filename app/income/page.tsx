@@ -16,6 +16,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import ChartErrorBoundary from '../components/ChartErrorBoundary'
 
 const INCOME_TYPES = new Set(['income'])
 const PAYMENT_TYPES = new Set(['payment', 'expense'])
@@ -213,21 +214,23 @@ export default function IncomePage() {
             <p className="text-sm text-zinc-500">No income or payment data available for this range.</p>
           ) : (
             <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-black/10 dark:stroke-white/10" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} className="text-zinc-500" />
-                  <YAxis tick={{ fontSize: 12 }} className="text-zinc-500" />
-                  <Tooltip
-                    formatter={(value) => formatCurrency(value as number)}
-                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: 4 }}
-                    itemStyle={{ color: '#fff' }}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} name="Income" />
-                  <Line type="monotone" dataKey="payments" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} name="Payments" />
-                </LineChart>
-              </ResponsiveContainer>
+              <ChartErrorBoundary>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={monthlyData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-black/10 dark:stroke-white/10" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} className="text-zinc-500" />
+                    <YAxis tick={{ fontSize: 12 }} className="text-zinc-500" />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(value as number)}
+                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: 4 }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} name="Income" isAnimationActive={false} />
+                    <Line type="monotone" dataKey="payments" stroke="#ef4444" strokeWidth={2} dot={{ r: 4 }} name="Payments" isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartErrorBoundary>
             </div>
           )}
         </div>
@@ -238,19 +241,21 @@ export default function IncomePage() {
             <p className="text-sm text-zinc-500">No payment transactions yet.</p>
           ) : (
             <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={paymentsByDestination} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-black/10 dark:stroke-white/10" />
-                  <XAxis type="number" tick={{ fontSize: 12 }} className="text-zinc-500" />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={160} className="text-zinc-500" />
-                  <Tooltip
-                    formatter={(value) => formatCurrency(value as number)}
-                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: 4 }}
-                    itemStyle={{ color: '#fff' }}
-                  />
-                  <Bar dataKey="value" fill="#ef4444" name="Amount" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <ChartErrorBoundary>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={paymentsByDestination} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-black/10 dark:stroke-white/10" />
+                    <XAxis type="number" tick={{ fontSize: 12 }} className="text-zinc-500" />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={160} className="text-zinc-500" />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(value as number)}
+                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: 4 }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Bar dataKey="value" fill="#ef4444" name="Amount" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartErrorBoundary>
             </div>
           )}
         </div>
